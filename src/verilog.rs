@@ -10,6 +10,7 @@ use std::{
 };
 
 use safety_net::{
+    attribute::Parameter,
     circuit::{Identifier, Instantiable, Net},
     netlist::{DrivenNet, Netlist},
 };
@@ -109,9 +110,20 @@ pub fn from_ast<I: Instantiable + FromId>(
                 netlist.insert_gate_disconnected(instantiable, inst_name)?;
             }
 
+            // Handle instance parameters
+            NodeEvent::Enter(RefNode::NamedParameterAssignment(assignment)) => {
+                let gate = netlist.last().unwrap();
+                let mut instance_type = gate.get_instance_type_mut().unwrap();
+                let key_node = unwrap_node!(assignment, ParameterIdentifier).unwrap();
+                let key_node = unwrap_node!(key_node, Identifier).unwrap();
+                let key = get_identifier(key_node, ast)?;
+                // let expr = unwrap_node!(assignment, ParamExpression).unwrap();
+                instance_type.set_parameter(&key, Parameter::Integer(1337));
+            }
+
             // Handle input decl
-            NodeEvent::Enter(RefNode::InputDeclarationNet(output)) => {
-                let id = unwrap_node!(output, PortIdentifier).unwrap();
+            NodeEvent::Enter(RefNode::InputDeclarationNet(input)) => {
+                let id = unwrap_node!(input, PortIdentifier).unwrap();
                 let name = get_identifier(id, ast)?;
                 let net = Net::new_logic(name.clone());
                 drivers.insert(name, netlist.insert_input(net));
@@ -136,7 +148,11 @@ pub fn from_ast<I: Instantiable + FromId>(
                     Some(n) => {
                         let arg_name = get_identifier(n, ast)?;
                         if let Some(oport) = gate.find_output(&port_name) {
+                            if output_set.contains(&arg_name) {
+                                oport.clone().expose_with_name(arg_name.clone());
+                            }
                             oport.as_net_mut().set_identifier(arg_name.clone());
+
                             drivers.insert(arg_name, oport);
                         } else if gate.find_input(&port_name).is_none() {
                             return Err(format!(
@@ -224,26 +240,40 @@ pub fn from_ast<I: Instantiable + FromId>(
         }
     }
 
-    // Pass two
-    for node_event in ast.into_iter().event() {
-        if let NodeEvent::Enter(RefNode::NamedPortConnection(connection)) = node_event {
-            let port = unwrap_node!(connection, PortIdentifier).unwrap();
-            let port_name = get_identifier(port, ast)?;
-            let arg = unwrap_node!(connection, Expression).unwrap();
-            let arg_i = unwrap_node!(arg.clone(), HierarchicalIdentifier);
-            let gate = netlist.last().unwrap();
-            if let Some(iport) = gate.find_input(&port_name) {
-                match arg_i {
-                    Some(n) => {
-                        let arg_name = get_identifier(n, ast)?;
-                        iport.connect(drivers[&arg_name].clone());
-                    }
-                    None => {
-                        todo!("Handle tied/constant drivers");
+    {
+        // Pass two
+        let mut iter = netlist.objects();
+        let mut gate = None;
+        for node_event in ast.into_iter().event() {
+            match node_event {
+                NodeEvent::Enter(RefNode::ModuleInstantiation(_))
+                | NodeEvent::Enter(RefNode::InputDeclarationNet(_)) => {
+                    gate = iter.next();
+                }
+
+                // Handle instance drivers
+                NodeEvent::Enter(RefNode::NamedPortConnection(connection)) => {
+                    let port = unwrap_node!(connection, PortIdentifier).unwrap();
+                    let port_name = get_identifier(port, ast)?;
+                    let arg = unwrap_node!(connection, Expression).unwrap();
+                    let arg_i = unwrap_node!(arg.clone(), HierarchicalIdentifier);
+                    if let Some(iport) = gate.clone().unwrap().find_input(&port_name) {
+                        match arg_i {
+                            Some(n) => {
+                                let arg_name = get_identifier(n, ast)?;
+                                iport.connect(drivers[&arg_name].clone());
+                            }
+                            None => {
+                                todo!("Handle tied/constant drivers");
+                            }
+                        }
                     }
                 }
+
+                _ => (),
             }
         }
     }
+
     Ok(netlist)
 }

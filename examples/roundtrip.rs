@@ -20,6 +20,8 @@ struct Gate {
     inputs: Vec<Net>,
     /// Output ports, order matters
     outputs: Vec<Net>,
+    /// Parameters
+    params: HashMap<Identifier, Parameter>,
 }
 
 impl Instantiable for Gate {
@@ -35,16 +37,20 @@ impl Instantiable for Gate {
         &self.outputs
     }
 
-    fn has_parameter(&self, _id: &Identifier) -> bool {
-        false
+    fn has_parameter(&self, id: &Identifier) -> bool {
+        self.params.contains_key(id)
     }
 
-    fn get_parameter(&self, _id: &Identifier) -> Option<Parameter> {
-        None
+    fn get_parameter(&self, id: &Identifier) -> Option<Parameter> {
+        self.params.get(id).cloned()
+    }
+
+    fn set_parameter(&mut self, id: &Identifier, val: Parameter) -> Option<Parameter> {
+        self.params.insert(id.clone(), val)
     }
 
     fn parameters(&self) -> impl Iterator<Item = (Identifier, Parameter)> {
-        std::iter::empty()
+        self.params.clone().into_iter()
     }
 }
 
@@ -55,16 +61,68 @@ impl FromId for Gate {
                 name: s.clone(),
                 inputs: vec!["A".into(), "B".into()],
                 outputs: vec!["Y".into()],
+                params: HashMap::new(),
             }),
             "OR" => Ok(Gate {
                 name: s.clone(),
                 inputs: vec!["A".into(), "B".into()],
                 outputs: vec!["Y".into()],
+                params: HashMap::new(),
             }),
             "NOT" => Ok(Gate {
                 name: s.clone(),
                 inputs: vec!["A".into()],
                 outputs: vec!["Y".into()],
+                params: HashMap::new(),
+            }),
+            "LUT1" => Ok(Gate {
+                name: s.clone(),
+                inputs: vec!["I0".into()],
+                outputs: vec!["O".into()],
+                params: HashMap::new(),
+            }),
+            "LUT2" => Ok(Gate {
+                name: s.clone(),
+                inputs: vec!["I0".into(), "I1".into()],
+                outputs: vec!["O".into()],
+                params: HashMap::new(),
+            }),
+            "LUT3" => Ok(Gate {
+                name: s.clone(),
+                inputs: vec!["I0".into(), "I1".into(), "I2".into()],
+                outputs: vec!["O".into()],
+                params: HashMap::new(),
+            }),
+            "LUT4" => Ok(Gate {
+                name: s.clone(),
+                inputs: vec!["I0".into(), "I1".into(), "I2".into(), "I3".into()],
+                outputs: vec!["O".into()],
+                params: HashMap::new(),
+            }),
+            "LUT5" => Ok(Gate {
+                name: s.clone(),
+                inputs: vec![
+                    "I0".into(),
+                    "I1".into(),
+                    "I2".into(),
+                    "I3".into(),
+                    "I4".into(),
+                ],
+                outputs: vec!["O".into()],
+                params: HashMap::new(),
+            }),
+            "LUT6" => Ok(Gate {
+                name: s.clone(),
+                inputs: vec![
+                    "I0".into(),
+                    "I1".into(),
+                    "I2".into(),
+                    "I3".into(),
+                    "I4".into(),
+                    "I5".into(),
+                ],
+                outputs: vec!["O".into()],
+                params: HashMap::new(),
             }),
             _ => Err(format!("Unknown primitive gate: {}", s)),
         }
