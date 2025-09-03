@@ -118,6 +118,79 @@ fn parse_literal_as_logic(node: RefNode, ast: &sv_parser::SyntaxTree) -> Result<
     }
 }
 
+/// Parse a literal `node` in the `ast` into a four-state logic value
+fn parse_literal_as_param(node: RefNode, ast: &sv_parser::SyntaxTree) -> Result<Parameter, String> {
+    let value = unwrap_node!(node.clone(), BinaryValue, HexValue, UnsignedNumber);
+    let size = unwrap_node!(node, Size);
+
+    if value.is_none() {
+        return Err(
+            "Expected a BinaryValue, HexValue, or UnsignedNumber Node under the Literal"
+                .to_string(),
+        );
+    }
+
+    match (size, value) {
+        (None, Some(RefNode::UnsignedNumber(n))) => Ok(Parameter::Integer(
+            ast.get_str(&n.nodes.0)
+                .unwrap()
+                .parse::<u64>()
+                .map_err(|_e| format!("Could not parse decimal value as u64"))?,
+        )),
+        (Some(size), Some(RefNode::UnsignedNumber(n))) => {
+            let size = unwrap_node!(size, NonZeroUnsignedNumber).unwrap();
+            if let RefNode::NonZeroUnsignedNumber(s) = size {
+                let size = ast
+                    .get_str(&s.nodes.0)
+                    .unwrap()
+                    .parse::<usize>()
+                    .map_err(|_e| format!("Could not parse size value as usize"))?;
+                let val = ast
+                    .get_str(&n.nodes.0)
+                    .unwrap()
+                    .parse::<u64>()
+                    .map_err(|_e| format!("Could not parse decimal value as u64"))?;
+                Ok(Parameter::bitvec(size, val))
+            } else {
+                Err("Size is missing".to_string())
+            }
+        }
+        (Some(size), Some(RefNode::HexValue(n))) => {
+            let size = unwrap_node!(size, NonZeroUnsignedNumber).unwrap();
+            if let RefNode::NonZeroUnsignedNumber(s) = size {
+                let size = ast
+                    .get_str(&s.nodes.0)
+                    .unwrap()
+                    .parse::<usize>()
+                    .map_err(|_e| format!("Could not parse size value as usize"))?;
+                let val = u64::from_str_radix(ast.get_str(&n.nodes.0).unwrap(), 16)
+                    .map_err(|_e| format!("Could not parse hex value as u64"))?;
+                Ok(Parameter::bitvec(size, val))
+            } else {
+                Err("Size is missing".to_string())
+            }
+        }
+
+        (Some(size), Some(RefNode::BinaryValue(n))) => {
+            let size = unwrap_node!(size, NonZeroUnsignedNumber).unwrap();
+            if let RefNode::NonZeroUnsignedNumber(s) = size {
+                let size = ast
+                    .get_str(&s.nodes.0)
+                    .unwrap()
+                    .parse::<usize>()
+                    .map_err(|_e| format!("Could not parse size value as usize"))?;
+                let val = u64::from_str_radix(ast.get_str(&n.nodes.0).unwrap(), 2)
+                    .map_err(|_e| format!("Could not parse binary value as u64"))?;
+                Ok(Parameter::bitvec(size, val))
+            } else {
+                Err("Size is missing".to_string())
+            }
+        }
+
+        _ => Err("Siz type combination is not supported".to_string()),
+    }
+}
+
 /// Construct a Safety Net [Netlist] from a Verilog netlist AST.
 /// Type parameter I defines the primitive library to parse into.
 pub fn from_ast<I: Instantiable + FromId>(
@@ -178,9 +251,10 @@ pub fn from_ast<I: Instantiable + FromId>(
                 let key_node = unwrap_node!(assignment, ParameterIdentifier).unwrap();
                 let key_node = unwrap_node!(key_node, Identifier).unwrap();
                 let key = get_identifier(key_node, ast)?;
-                // let expr = unwrap_node!(assignment, ParamExpression).unwrap();
-                // TODO(matth2k): Read the actual parameter value
-                instance_type.set_parameter(&key, Parameter::Integer(1337));
+                let expr = unwrap_node!(assignment, ParamExpression).unwrap();
+                let expr = unwrap_node!(expr, PrimaryLiteral).unwrap();
+                let val = parse_literal_as_param(expr, ast)?;
+                instance_type.set_parameter(&key, val);
             }
 
             // Handle input decl
