@@ -9,11 +9,12 @@ use nl_compiler::verilog::{self, FromId};
 use safety_net::{
     attribute::Parameter,
     circuit::{Identifier, Instantiable, Net},
-    logic::Logic,
+    logic::Logic, netlist::serde::netlist_serialize,
 };
 
 /// A primitive gate in a digital circuit, such as AND, OR, NOT, etc.
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 struct Gate {
     /// The name of the primitive
     name: Identifier,
@@ -195,6 +196,9 @@ struct Args {
     /// Dump ast
     #[arg(short = 'd', long, default_value_t = false)]
     dump_ast: bool,
+    /// Serialize
+    #[arg(short = 's', long, default_value_t = false)]
+    serialize: bool,
 }
 
 /// A wrapper for parsing verilog at file `path` with content `s`
@@ -236,13 +240,20 @@ fn main() -> std::io::Result<()> {
 
     netlist.verify().map_err(std::io::Error::other)?;
 
-    eprintln!("{netlist}");
-    let analysis = netlist
-        .get_analysis::<safety_net::graph::MultiDiGraph<_>>()
-        .unwrap();
-    let graph = analysis.get_graph();
-    let dot = petgraph::dot::Dot::with_config(graph, &[]);
-    println!("{dot}");
+    let netlist = netlist.reclaim().unwrap();
+
+    if args.serialize {
+        netlist_serialize(netlist, std::io::stdout())
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    } else {
+        eprintln!("{netlist}");
+        let analysis = netlist
+            .get_analysis::<safety_net::graph::MultiDiGraph<_>>()
+            .unwrap();
+        let graph = analysis.get_graph();
+        let dot = petgraph::dot::Dot::with_config(graph, &[]);
+        println!("{dot}");
+    }
 
     Ok(())
 }
