@@ -123,6 +123,8 @@ fn parse_literal_as_param(node: RefNode, ast: &sv_parser::SyntaxTree) -> Result<
     let value = unwrap_node!(node.clone(), BinaryValue, HexValue, UnsignedNumber);
     let size = unwrap_node!(node, Size);
 
+    // TODO(matth2k): Params need to be four-state logic too. Example: Reg init 1'hx
+
     if value.is_none() {
         return Err(
             "Expected a BinaryValue, HexValue, or UnsignedNumber Node under the Literal"
@@ -135,7 +137,7 @@ fn parse_literal_as_param(node: RefNode, ast: &sv_parser::SyntaxTree) -> Result<
             ast.get_str(&n.nodes.0)
                 .unwrap()
                 .parse::<u64>()
-                .map_err(|_e| format!("Could not parse decimal value as u64"))?,
+                .map_err(|_e| "Could not parse decimal value as u64".to_string())?,
         )),
         (Some(size), Some(RefNode::UnsignedNumber(n))) => {
             let size = unwrap_node!(size, NonZeroUnsignedNumber).unwrap();
@@ -144,12 +146,12 @@ fn parse_literal_as_param(node: RefNode, ast: &sv_parser::SyntaxTree) -> Result<
                     .get_str(&s.nodes.0)
                     .unwrap()
                     .parse::<usize>()
-                    .map_err(|_e| format!("Could not parse size value as usize"))?;
+                    .map_err(|_e| "Could not parse size value as usize".to_string())?;
                 let val = ast
                     .get_str(&n.nodes.0)
                     .unwrap()
                     .parse::<u64>()
-                    .map_err(|_e| format!("Could not parse decimal value as u64"))?;
+                    .map_err(|_e| "Could not parse decimal value as u64".to_string())?;
                 Ok(Parameter::bitvec(size, val))
             } else {
                 Err("Size is missing".to_string())
@@ -162,9 +164,9 @@ fn parse_literal_as_param(node: RefNode, ast: &sv_parser::SyntaxTree) -> Result<
                     .get_str(&s.nodes.0)
                     .unwrap()
                     .parse::<usize>()
-                    .map_err(|_e| format!("Could not parse size value as usize"))?;
+                    .map_err(|_e| "Could not parse size value as usize".to_string())?;
                 let val = u64::from_str_radix(ast.get_str(&n.nodes.0).unwrap(), 16)
-                    .map_err(|_e| format!("Could not parse hex value as u64"))?;
+                    .map_err(|_e| "Could not parse hex value as u64".to_string())?;
                 Ok(Parameter::bitvec(size, val))
             } else {
                 Err("Size is missing".to_string())
@@ -178,9 +180,9 @@ fn parse_literal_as_param(node: RefNode, ast: &sv_parser::SyntaxTree) -> Result<
                     .get_str(&s.nodes.0)
                     .unwrap()
                     .parse::<usize>()
-                    .map_err(|_e| format!("Could not parse size value as usize"))?;
+                    .map_err(|_e| "Could not parse size value as usize".to_string())?;
                 let val = u64::from_str_radix(ast.get_str(&n.nodes.0).unwrap(), 2)
-                    .map_err(|_e| format!("Could not parse binary value as u64"))?;
+                    .map_err(|_e| "Could not parse binary value as u64".to_string())?;
                 Ok(Parameter::bitvec(size, val))
             } else {
                 Err("Size is missing".to_string())
@@ -201,7 +203,7 @@ pub fn from_ast<I: Instantiable + FromId>(
     let mut multiple = false;
     let mut drivers: HashMap<Identifier, DrivenNet<I>> = HashMap::new();
 
-    // Pass one
+    // Cell creation pass
     let mut last_gate: Option<NetRef<I>> = None;
     for node_event in ast.into_iter().event() {
         match node_event {
@@ -342,42 +344,39 @@ pub fn from_ast<I: Instantiable + FromId>(
                 }
             }
 
-            // Handle wire assignment
-            // NodeEvent::Enter(RefNode::NetAssignment(net_assign)) => {
-            //     let lhs = unwrap_node!(net_assign, NetLvalue).unwrap();
-            //     let lhs_id = unwrap_node!(lhs, Identifier).unwrap();
-            //     let lhs_name = get_identifier(lhs_id, ast).unwrap();
-            //     let rhs = unwrap_node!(net_assign, Expression).unwrap();
-            //     let rhs_id = unwrap_node!(rhs, Identifier, PrimaryLiteral).unwrap();
-            //     let assignment = unwrap_node!(net_assign, Symbol).unwrap();
-            //     match assignment {
-            //         RefNode::Symbol(sym) => {
-            //             let loc = sym.nodes.0;
-            //             let eq = ast.get_str(&loc).unwrap();
-            //             if eq != "=" {
-            //                 return Err(format!("Expected an assignment operator, got {eq}"));
-            //             }
-            //         }
-            //         _ => {
-            //             return Err("Expected an assignment operator".to_string());
-            //         }
-            //     }
-            //     if matches!(rhs_id, RefNode::Identifier(_)) {
-            //         let rhs_name = get_identifier(rhs_id, ast).unwrap();
-            //         cur_insts.push(SVPrimitive::new_wire(
-            //             rhs_name.clone(),
-            //             lhs_name.clone(),
-            //             lhs_name + "_wire_" + &rhs_name,
-            //         ));
-            //     } else {
-            //         let val = parse_literal_as_logic(rhs_id, ast)?;
-            //         cur_insts.push(SVPrimitive::new_const(
-            //             val,
-            //             lhs_name.clone(),
-            //             lhs_name + "_const_binary",
-            //         ));
-            //     }
-            // }
+            // Handle constant wire assignment
+            NodeEvent::Enter(RefNode::NetAssignment(net_assign)) => {
+                let lhs = unwrap_node!(net_assign, NetLvalue).unwrap();
+                let lhs_id = unwrap_node!(lhs, Identifier).unwrap();
+                let lhs_id = get_identifier(lhs_id, ast).unwrap();
+                let rhs = unwrap_node!(net_assign, Expression).unwrap();
+                let rhs_id = unwrap_node!(rhs, Identifier, PrimaryLiteral).unwrap();
+                let assignment = unwrap_node!(net_assign, Symbol).unwrap();
+
+                // Check assignment is an assignment
+                match assignment {
+                    RefNode::Symbol(sym) => {
+                        let loc = sym.nodes.0;
+                        let eq = ast.get_str(&loc).unwrap();
+                        if eq != "=" {
+                            return Err(format!("Expected an assignment operator, got {eq}"));
+                        }
+                    }
+                    _ => {
+                        return Err("Expected an assignment operator".to_string());
+                    }
+                }
+
+                // Only dealing with constants
+                if matches!(rhs_id, RefNode::PrimaryLiteral(_)) {
+                    let val = parse_literal_as_logic(rhs_id, ast)?;
+                    let id = lhs_id.clone() + Identifier::new("const_logic".to_string());
+                    let net = netlist.insert_constant(val, id.clone())?;
+                    last_gate = Some(net.clone().unwrap());
+                    eprintln!("Inserted constant net {id}");
+                    drivers.insert(lhs_id, net);
+                }
+            }
 
             // The stuff we definitely don't support
             NodeEvent::Enter(RefNode::BinaryOperator(_)) => {
@@ -399,8 +398,38 @@ pub fn from_ast<I: Instantiable + FromId>(
         }
     }
 
+    // Wire aliasing pass
+    let mut changing = true;
+    while changing {
+        changing = false;
+
+        for node_event in ast.into_iter().event() {
+            if let NodeEvent::Enter(RefNode::NetAssignment(net_assign)) = node_event {
+                let lhs = unwrap_node!(net_assign, NetLvalue).unwrap();
+                let lhs_id = unwrap_node!(lhs, Identifier).unwrap();
+                let lhs_id = get_identifier(lhs_id, ast).unwrap();
+                let rhs = unwrap_node!(net_assign, Expression).unwrap();
+                let rhs_id = unwrap_node!(rhs, Identifier, PrimaryLiteral).unwrap();
+
+                // Only dealing with identifier aliasing
+                if matches!(rhs_id, RefNode::Identifier(_)) {
+                    if drivers.contains_key(&lhs_id) {
+                        continue;
+                    }
+                    let rhs_id = get_identifier(rhs_id, ast).unwrap();
+                    if !drivers.contains_key(&rhs_id) {
+                        continue;
+                    }
+                    let alias = drivers[&rhs_id].clone();
+                    drivers.insert(lhs_id, alias);
+                    changing = true;
+                }
+            }
+        }
+    }
+
     {
-        // Pass two
+        // Final wiring pass
         let mut iter = netlist.objects();
         let mut gate = None;
         for node_event in ast.into_iter().event() {
@@ -408,6 +437,16 @@ pub fn from_ast<I: Instantiable + FromId>(
                 NodeEvent::Enter(RefNode::ModuleInstantiation(_))
                 | NodeEvent::Enter(RefNode::InputDeclarationNet(_)) => {
                     gate = iter.next();
+                }
+
+                NodeEvent::Enter(RefNode::NetAssignment(net_assign)) => {
+                    let rhs = unwrap_node!(net_assign, Expression).unwrap();
+                    let rhs_id = unwrap_node!(rhs, Identifier, PrimaryLiteral).unwrap();
+
+                    // Only dealing with constants
+                    if matches!(rhs_id, RefNode::PrimaryLiteral(_)) {
+                        gate = iter.next();
+                    }
                 }
 
                 // Handle instance drivers
@@ -420,7 +459,9 @@ pub fn from_ast<I: Instantiable + FromId>(
                         match arg_i {
                             Some(n) => {
                                 let arg_name = get_identifier(n, ast)?;
-                                iport.connect(drivers[&arg_name].clone());
+                                if let Some(d) = drivers.get(&arg_name) {
+                                    iport.connect(d.clone());
+                                }
                             }
                             None => {
                                 let val_name = &"const".into()

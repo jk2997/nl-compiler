@@ -151,6 +151,12 @@ impl FromId for Gate {
                 outputs: vec!["O".into()],
                 params: HashMap::new(),
             }),
+            "FDRE" => Ok(Gate {
+                name: s.clone(),
+                inputs: vec!["C".into(), "CE".into(), "D".into(), "R".into()],
+                outputs: vec!["Q".into()],
+                params: HashMap::new(),
+            }),
             _ => Err(format!("Unknown primitive gate: {}", s)),
         }
     }
