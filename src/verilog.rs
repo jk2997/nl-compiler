@@ -12,7 +12,9 @@ use std::{
 use safety_net::{
     attribute::Parameter,
     circuit::{Identifier, Instantiable, Net},
-    netlist::{DrivenNet, Netlist},
+    format_id,
+    logic::Logic,
+    netlist::{DrivenNet, NetRef, Netlist},
 };
 use sv_parser::{Locate, NodeEvent, RefNode, unwrap_node};
 
@@ -58,6 +60,65 @@ fn get_identifier(node: RefNode, ast: &sv_parser::SyntaxTree) -> Result<Identifi
     }
 }
 
+/// Parse a literal `node` in the `ast` into a four-state logic value
+fn parse_literal_as_logic(node: RefNode, ast: &sv_parser::SyntaxTree) -> Result<Logic, String> {
+    let value = unwrap_node!(node, BinaryValue, HexValue, UnsignedNumber);
+
+    if value.is_none() {
+        return Err(
+            "Expected a BinaryValue, HexValue, or UnsignedNumber Node under the Literal"
+                .to_string(),
+        );
+    }
+
+    match value.unwrap() {
+        RefNode::BinaryValue(b) => {
+            let loc = b.nodes.0;
+            let val = ast.get_str(&loc).unwrap();
+            if val == "x" {
+                return Ok(Logic::X);
+            }
+            let num = u64::from_str_radix(val, 2)
+                .map_err(|_e| format!("Could not parse binary value {val} as bool"))?;
+            match num {
+                1 => Ok(true.into()),
+                0 => Ok(false.into()),
+                _ => Err(format!("Expected a 1 bit constant. Found {num}")),
+            }
+        }
+        RefNode::HexValue(b) => {
+            let loc = b.nodes.0;
+            let val = ast.get_str(&loc).unwrap();
+            if val == "x" {
+                return Ok(Logic::X);
+            }
+            let num = u64::from_str_radix(val, 16)
+                .map_err(|_e| format!("Could not parse hex value {val} as bool"))?;
+            match num {
+                1 => Ok(true.into()),
+                0 => Ok(false.into()),
+                _ => Err(format!("Expected a 1 bit constant. Found {num}")),
+            }
+        }
+        RefNode::UnsignedNumber(b) => {
+            let loc = b.nodes.0;
+            let val = ast.get_str(&loc).unwrap();
+            if val == "x" {
+                return Ok(Logic::X);
+            }
+            let num = val
+                .parse::<u64>()
+                .map_err(|_e| format!("Could not parse decimal value {val} as bool"))?;
+            match num {
+                1 => Ok(true.into()),
+                0 => Ok(false.into()),
+                _ => Err(format!("Expected a 1 bit constant. Found {num}")),
+            }
+        }
+        _ => unreachable!(),
+    }
+}
+
 /// Construct a Safety Net [Netlist] from a Verilog netlist AST.
 /// Type parameter I defines the primitive library to parse into.
 pub fn from_ast<I: Instantiable + FromId>(
@@ -69,6 +130,7 @@ pub fn from_ast<I: Instantiable + FromId>(
     let mut drivers: HashMap<Identifier, DrivenNet<I>> = HashMap::new();
 
     // Pass one
+    let mut last_gate: Option<NetRef<I>> = None;
     for node_event in ast.into_iter().event() {
         match node_event {
             // Hande module definition
@@ -107,17 +169,18 @@ pub fn from_ast<I: Instantiable + FromId>(
                 let id = unwrap_node!(inst, InstanceIdentifier).unwrap();
                 let inst_name = get_identifier(id, ast)?;
                 let instantiable = I::from_id(&mod_name)?;
-                netlist.insert_gate_disconnected(instantiable, inst_name)?;
+                last_gate = Some(netlist.insert_gate_disconnected(instantiable, inst_name)?);
             }
 
             // Handle instance parameters
             NodeEvent::Enter(RefNode::NamedParameterAssignment(assignment)) => {
-                let gate = netlist.last().unwrap();
+                let gate = last_gate.as_ref().unwrap();
                 let mut instance_type = gate.get_instance_type_mut().unwrap();
                 let key_node = unwrap_node!(assignment, ParameterIdentifier).unwrap();
                 let key_node = unwrap_node!(key_node, Identifier).unwrap();
                 let key = get_identifier(key_node, ast)?;
                 // let expr = unwrap_node!(assignment, ParamExpression).unwrap();
+                // TODO(matth2k): Read the actual parameter value
                 instance_type.set_parameter(&key, Parameter::Integer(1337));
             }
 
@@ -126,7 +189,9 @@ pub fn from_ast<I: Instantiable + FromId>(
                 let id = unwrap_node!(input, PortIdentifier).unwrap();
                 let name = get_identifier(id, ast)?;
                 let net = Net::new_logic(name.clone());
-                drivers.insert(name, netlist.insert_input(net));
+                let net = netlist.insert_input(net);
+                last_gate = Some(net.clone().unwrap());
+                drivers.insert(name, net);
             }
 
             // Handle output decl
@@ -142,7 +207,7 @@ pub fn from_ast<I: Instantiable + FromId>(
                 let port_name = get_identifier(port, ast)?;
                 let arg = unwrap_node!(connection, Expression).unwrap();
                 let arg_i = unwrap_node!(arg.clone(), HierarchicalIdentifier);
-                let gate = netlist.last().unwrap();
+                let gate = last_gate.as_ref().unwrap();
 
                 match arg_i {
                     Some(n) => {
@@ -165,7 +230,33 @@ pub fn from_ast<I: Instantiable + FromId>(
                     None => {
                         if gate.find_output(&port_name).is_some() {
                             return Err("Cannot drive a constant from an output port".to_string());
-                        } else if gate.find_input(&port_name).is_none() {
+                        } else if gate.find_input(&port_name).is_some() {
+                            let literal = unwrap_node!(arg, PrimaryLiteral);
+                            if literal.is_none() {
+                                return Err(format!(
+                                    "Expected a literal for connection on port {port_name}"
+                                ));
+                            }
+                            let value = parse_literal_as_logic(literal.unwrap(), ast)?;
+
+                            // TODO(matth2k): Need real identifier concatenation.
+                            // This needs to match below in pass two.
+                            let val_name = format_id!(
+                                "const_{}_{}",
+                                gate.get_instance_name().unwrap(),
+                                port_name
+                            );
+                            let driverless = netlist.insert_constant(
+                                value,
+                                format_id!(
+                                    "const_inst_{}_{}",
+                                    gate.get_instance_name().unwrap(),
+                                    port_name
+                                ),
+                            )?;
+                            driverless.as_net_mut().set_identifier(val_name.clone());
+                            drivers.insert(val_name, driverless);
+                        } else {
                             return Err(format!(
                                 "Could not find port {} on instance {}",
                                 port_name,
@@ -257,14 +348,21 @@ pub fn from_ast<I: Instantiable + FromId>(
                     let port_name = get_identifier(port, ast)?;
                     let arg = unwrap_node!(connection, Expression).unwrap();
                     let arg_i = unwrap_node!(arg.clone(), HierarchicalIdentifier);
-                    if let Some(iport) = gate.clone().unwrap().find_input(&port_name) {
+                    if let Some(iport) = gate.as_ref().unwrap().find_input(&port_name) {
                         match arg_i {
                             Some(n) => {
                                 let arg_name = get_identifier(n, ast)?;
                                 iport.connect(drivers[&arg_name].clone());
                             }
                             None => {
-                                todo!("Handle tied/constant drivers");
+                                // TODO(matth2k): Need real identifier concatenation
+                                let val_name = format_id!(
+                                    "const_{}_{}",
+                                    gate.as_ref().unwrap().get_instance_name().unwrap(),
+                                    port_name
+                                );
+                                iport.connect(drivers[&val_name].clone());
+                                iter.next();
                             }
                         }
                     }

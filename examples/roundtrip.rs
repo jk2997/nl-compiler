@@ -9,6 +9,7 @@ use nl_compiler::verilog::{self, FromId};
 use safety_net::{
     attribute::Parameter,
     circuit::{Identifier, Instantiable, Net},
+    logic::Logic,
 };
 
 /// A primitive gate in a digital circuit, such as AND, OR, NOT, etc.
@@ -51,6 +52,32 @@ impl Instantiable for Gate {
 
     fn parameters(&self) -> impl Iterator<Item = (Identifier, Parameter)> {
         self.params.clone().into_iter()
+    }
+
+    fn from_constant(val: Logic) -> Option<Self> {
+        match val {
+            Logic::False => Some(Gate {
+                name: "GND".into(),
+                inputs: vec![],
+                outputs: vec!["Y".into()],
+                params: HashMap::new(),
+            }),
+            Logic::True => Some(Gate {
+                name: "VDD".into(),
+                inputs: vec![],
+                outputs: vec!["Y".into()],
+                params: HashMap::new(),
+            }),
+            _ => None,
+        }
+    }
+
+    fn get_constant(&self) -> Option<Logic> {
+        match self.name.to_string().as_str() {
+            "GND" => Some(Logic::False),
+            "VDD" => Some(Logic::True),
+            _ => None,
+        }
     }
 }
 
