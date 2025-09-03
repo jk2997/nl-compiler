@@ -157,6 +157,30 @@ impl FromId for Gate {
                 outputs: vec!["Q".into()],
                 params: HashMap::new(),
             }),
+            "NOR2_X1" | "NAND2_X1" => Ok(Gate {
+                name: s.clone(),
+                inputs: vec!["A1".into(), "A2".into()],
+                outputs: vec!["ZN".into()],
+                params: HashMap::new(),
+            }),
+            "INV_X1" => Ok(Gate {
+                name: s.clone(),
+                inputs: vec!["A".into()],
+                outputs: vec!["ZN".into()],
+                params: HashMap::new(),
+            }),
+            "AOI21_X1" => Ok(Gate {
+                name: s.clone(),
+                inputs: vec!["A".into(), "B1".into(), "B2".into()],
+                outputs: vec!["ZN".into()],
+                params: HashMap::new(),
+            }),
+            "AOI22_X1" => Ok(Gate {
+                name: s.clone(),
+                inputs: vec!["A1".into(), "A2".into(), "B1".into(), "B2".into()],
+                outputs: vec!["ZN".into()],
+                params: HashMap::new(),
+            }),
             _ => Err(format!("Unknown primitive gate: {}", s)),
         }
     }
