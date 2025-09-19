@@ -9,7 +9,8 @@ use nl_compiler::verilog::{self, FromId};
 use safety_net::{
     attribute::Parameter,
     circuit::{Identifier, Instantiable, Net},
-    logic::Logic, netlist::serde::netlist_serialize,
+    logic::Logic,
+    netlist::serde::netlist_serialize,
 };
 
 /// A primitive gate in a digital circuit, such as AND, OR, NOT, etc.
