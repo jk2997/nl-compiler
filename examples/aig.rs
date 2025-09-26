@@ -3,7 +3,6 @@ use std::{collections::HashMap, path::PathBuf};
 use clap::Parser;
 use flussab_aiger::ascii;
 use nl_compiler::aig::{self};
-use nl_compiler::cells::FromId;
 #[cfg(feature = "serde")]
 use safety_net::netlist::serde::netlist_serialize;
 use safety_net::{
@@ -82,108 +81,21 @@ impl Instantiable for Gate {
     }
 }
 
-impl FromId for Gate {
-    fn from_id(s: &Identifier) -> Result<Self, String> {
-        match s.to_string().as_str() {
-            "AND" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["A".into(), "B".into()],
-                outputs: vec!["Y".into()],
-                params: HashMap::new(),
-            }),
-            "OR" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["A".into(), "B".into()],
-                outputs: vec!["Y".into()],
-                params: HashMap::new(),
-            }),
-            "NOT" | "INV" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["A".into()],
-                outputs: vec!["Y".into()],
-                params: HashMap::new(),
-            }),
-            "LUT1" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["I0".into()],
-                outputs: vec!["O".into()],
-                params: HashMap::new(),
-            }),
-            "LUT2" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["I0".into(), "I1".into()],
-                outputs: vec!["O".into()],
-                params: HashMap::new(),
-            }),
-            "LUT3" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["I0".into(), "I1".into(), "I2".into()],
-                outputs: vec!["O".into()],
-                params: HashMap::new(),
-            }),
-            "LUT4" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["I0".into(), "I1".into(), "I2".into(), "I3".into()],
-                outputs: vec!["O".into()],
-                params: HashMap::new(),
-            }),
-            "LUT5" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec![
-                    "I0".into(),
-                    "I1".into(),
-                    "I2".into(),
-                    "I3".into(),
-                    "I4".into(),
-                ],
-                outputs: vec!["O".into()],
-                params: HashMap::new(),
-            }),
-            "LUT6" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec![
-                    "I0".into(),
-                    "I1".into(),
-                    "I2".into(),
-                    "I3".into(),
-                    "I4".into(),
-                    "I5".into(),
-                ],
-                outputs: vec!["O".into()],
-                params: HashMap::new(),
-            }),
-            "FDRE" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["C".into(), "CE".into(), "D".into(), "R".into()],
-                outputs: vec!["Q".into()],
-                params: HashMap::new(),
-            }),
-            "NOR2_X1" | "NAND2_X1" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["A1".into(), "A2".into()],
-                outputs: vec!["ZN".into()],
-                params: HashMap::new(),
-            }),
-            "INV_X1" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["A".into()],
-                outputs: vec!["ZN".into()],
-                params: HashMap::new(),
-            }),
-            "AOI21_X1" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["A".into(), "B1".into(), "B2".into()],
-                outputs: vec!["ZN".into()],
-                params: HashMap::new(),
-            }),
-            "AOI22_X1" => Ok(Gate {
-                name: s.clone(),
-                inputs: vec!["A1".into(), "A2".into(), "B1".into(), "B2".into()],
-                outputs: vec!["ZN".into()],
-                params: HashMap::new(),
-            }),
-            _ => Err(format!("Unknown primitive gate: {}", s)),
-        }
+fn and() -> Gate {
+    Gate {
+        name: "AND".into(),
+        inputs: vec!["A".into(), "B".into()],
+        outputs: vec!["Y".into()],
+        params: HashMap::new(),
+    }
+}
+
+fn inv() -> Gate {
+    Gate {
+        name: "INV".into(),
+        inputs: vec!["A".into()],
+        outputs: vec!["Y".into()],
+        params: HashMap::new(),
     }
 }
 
@@ -221,7 +133,7 @@ fn main() -> std::io::Result<()> {
         return Ok(());
     }
 
-    let netlist = aig::from_aig::<Gate>(&aig, "top".to_string()).map_err(std::io::Error::other)?;
+    let netlist = aig::from_aig::<Gate>(&aig, and(), inv()).map_err(std::io::Error::other)?;
 
     netlist.verify().map_err(std::io::Error::other)?;
 

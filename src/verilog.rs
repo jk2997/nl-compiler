@@ -1,6 +1,6 @@
 /*!
 
-  The consumed AST
+  Compile Verilog AST
 
 */
 
