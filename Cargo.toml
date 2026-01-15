@@ -12,10 +12,11 @@ categories = [
 
 description = "AIG and Verilog frontend compilers"
 
-# documentation = "https://matth2k.github.io/safety-net/"
-# homepage = "https://matth2k.github.io/safety-net/"
+documentation = "https://matth2k.github.io/safety-net/"
+homepage = "https://matth2k.github.io/safety-net/"
 include = [
     "Cargo.toml",
+    "clippy.toml",
     "LICENSE-MIT",
     "LICENSE-APACHE",
     "README.md",
@@ -35,7 +36,7 @@ keywords = [
 readme = "README.md"
 
 
-# repository = "https://github.com/matth2k/nl-compiler"
+repository = "https://github.com/matth2k/nl-compiler"
 
 [dependencies]
 thiserror = { version = "2.0.16" }
