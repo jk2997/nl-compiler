@@ -245,6 +245,7 @@ pub fn from_vast<I: Instantiable + FromId>(
 
     // Cell creation pass
     let mut last_gate: Option<NetRef<I>> = None;
+    let mut mod_name: Identifier = Identifier::new("None".to_string());
     let mut locs: Vec<Locate> = Vec::new();
     for node_event in ast.into_iter().event() {
         match node_event {
@@ -287,7 +288,7 @@ pub fn from_vast<I: Instantiable + FromId>(
             // Handle primitive instantiation
             NodeEvent::Enter(RefNode::ModuleInstantiation(inst)) => {
                 let id = unwrap_node!(inst, ModuleIdentifier).unwrap();
-                let mod_name = get_identifier(id, ast)?;
+                mod_name = get_identifier(id, ast)?;
                 let id = unwrap_node!(inst, InstanceIdentifier).unwrap();
                 let inst_name = get_identifier(id, ast)?;
                 let instantiable = I::from_id(&mod_name)
@@ -304,8 +305,14 @@ pub fn from_vast<I: Instantiable + FromId>(
                 let key = get_identifier(key_node, ast)?;
                 let expr = unwrap_node!(assignment, ParamExpression).unwrap();
                 let expr = unwrap_node!(expr, PrimaryLiteral).unwrap();
-                let val = parse_literal_as_param(expr, ast)?;
-                instance_type.set_parameter(&key, val);
+                #[allow(unused_assignments)]
+                let mut val: Option<Parameter> = None;
+                if mod_name.get_name() == "FDRE" {
+                    val = Some(Parameter::Logic(parse_literal_as_logic(expr, ast)?));
+                } else {
+                    val = Some(parse_literal_as_param(expr, ast)?);
+                }
+                instance_type.set_parameter(&key, val.unwrap());
             }
 
             // Handle input decl
@@ -488,7 +495,6 @@ pub fn from_vast<I: Instantiable + FromId>(
             _ => (),
         }
     }
-
     // Wire aliasing pass
     let mut changing = true;
     while changing {
@@ -501,7 +507,6 @@ pub fn from_vast<I: Instantiable + FromId>(
                 let lhs_id = get_identifier(lhs_id, ast).unwrap();
                 let rhs = unwrap_node!(net_assign, Expression).unwrap();
                 let rhs_id = unwrap_node!(rhs, Identifier, PrimaryLiteral).unwrap();
-
                 // Only dealing with identifier aliasing
                 if matches!(rhs_id, RefNode::Identifier(_)) {
                     if drivers.contains_key(&lhs_id) {
@@ -523,7 +528,6 @@ pub fn from_vast<I: Instantiable + FromId>(
             }
         }
     }
-
     locs.clear();
     {
         // Final wiring pass
