@@ -351,6 +351,7 @@ pub fn from_vast<I: Instantiable + FromId>(
 
                             drivers.insert(arg_name, oport);
                         } else if gate.find_input(&port_name).is_none() {
+                            eprintln!("here");
                             return Err(VerilogError::Other(
                                 locs.last().cloned(),
                                 format!(
@@ -396,6 +397,7 @@ pub fn from_vast<I: Instantiable + FromId>(
                             driverless.as_net_mut().set_identifier(val_name.clone());
                             drivers.insert(val_name, driverless);
                         } else {
+                            eprintln!("or here");
                             return Err(VerilogError::Other(
                                 locs.last().cloned(),
                                 format!(
