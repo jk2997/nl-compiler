@@ -307,6 +307,7 @@ pub fn from_vast<I: Instantiable + FromId>(
                 let expr = unwrap_node!(expr, PrimaryLiteral).unwrap();
                 #[allow(unused_assignments)]
                 let mut val: Option<Parameter> = None;
+                eprintln!("mod_name = {}", mod_name.get_name());
                 if mod_name.get_name() == "FDRE" {
                     val = Some(Parameter::Logic(parse_literal_as_logic(expr, ast)?));
                 } else {
