@@ -291,6 +291,7 @@ pub fn from_vast<I: Instantiable + FromId>(
                 mod_name = get_identifier(id, ast)?;
                 let id = unwrap_node!(inst, InstanceIdentifier).unwrap();
                 let inst_name = get_identifier(id, ast)?;
+                eprintln!("inst_name = {}", inst_name.get_name());
                 let instantiable = I::from_id(&mod_name)
                     .map_err(|e| VerilogError::SafetyNetError(locs.last().cloned(), e))?;
                 last_gate = Some(netlist.insert_gate_disconnected(instantiable, inst_name));
