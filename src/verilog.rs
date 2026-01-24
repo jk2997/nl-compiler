@@ -347,6 +347,7 @@ pub fn from_vast<I: Instantiable + FromId>(
                     Some(n) => {
                         let arg_name = get_identifier(n, ast)?;
                         eprintln!("arg_name = {}", arg_name.get_name());
+                        eprintln!("port_name = {}", port_name.get_name());
                         if let Some(oport) = gate.find_output(&port_name) {
                             if output_set.contains(&arg_name) {
                                 oport.clone().expose_with_name(arg_name.clone());
