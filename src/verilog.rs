@@ -289,6 +289,7 @@ pub fn from_vast<I: Instantiable + FromId>(
             NodeEvent::Enter(RefNode::ModuleInstantiation(inst)) => {
                 let id = unwrap_node!(inst, ModuleIdentifier).unwrap();
                 mod_name = get_identifier(id, ast)?;
+                eprintln!("mod_name after get_identifier = {}", mod_name.get_name());
                 let id = unwrap_node!(inst, InstanceIdentifier).unwrap();
                 let inst_name = get_identifier(id, ast)?;
                 eprintln!("inst_name = {}", inst_name.get_name());
