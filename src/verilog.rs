@@ -408,13 +408,13 @@ pub fn from_vast_overrides<I: Instantiable + FromId, F: Fn(&Identifier, &I) -> O
                             }
                             let value = parse_literal_as_logic(literal.unwrap(), ast)?;
 
-                            let val_name = &"const".into()
-                                + &gate.get_instance_name().unwrap()
+                            let val_name: Identifier = Identifier::new("const".to_string())
+                                + gate.get_instance_name().unwrap()
                                 + port_name.clone();
                             let driverless = netlist
                                 .insert_constant(
                                     value,
-                                    Identifier::new("const_inst".to_string())
+                                    Identifier::new("const".to_string())
                                         + gate.get_instance_name().unwrap()
                                         + port_name,
                                 )
@@ -623,8 +623,8 @@ pub fn from_vast_overrides<I: Instantiable + FromId, F: Fn(&Identifier, &I) -> O
                                 }
                             }
                             None => {
-                                let val_name = &"const".into()
-                                    + &gate.as_ref().unwrap().get_instance_name().unwrap()
+                                let val_name = Identifier::new("const".to_string())
+                                    + gate.as_ref().unwrap().get_instance_name().unwrap().clone()
                                     + port_name;
                                 iport.connect(drivers[&val_name].clone());
                                 iter.next();
